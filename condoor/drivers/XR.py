@@ -5,7 +5,7 @@ import re
 import time
 from condoor.drivers.generic import Driver as Generic
 from condoor import pattern_manager, TIMEOUT, EOF, ConnectionAuthenticationError, ConnectionError, \
-    CommandSyntaxError, ConfigurationErrors
+    CommandSyntaxError, ConfigurationErrors, ConnectionStandbyConsole
 from condoor.fsm import FSM
 from condoor.actions import a_reload_na, a_send, a_send_boot, a_reconnect, a_send_username, a_send_password,\
     a_message_callback, a_return_and_reconnect, a_not_committed, a_send_line, a_capture_show_configuration_failed, \
@@ -46,12 +46,14 @@ class Driver(Generic):
     def reload(self, reload_timeout, save_config):
         """Reload the device."""
         PROCEED = re.compile(re.escape("Proceed with reload? [confirm]"))
+        CONTINUE = re.compile(re.escape("Do you wish to continue?[confirm(y/n)]"))
         DONE = re.compile(re.escape("[Done]"))
         CONFIGURATION_COMPLETED = re.compile("SYSTEM CONFIGURATION COMPLETED")
         CONFIGURATION_IN_PROCESS = re.compile("SYSTEM CONFIGURATION IN PROCESS")
 
         # CONSOLE = re.compile("ios con[0|1]/RS?P[0-1]/CPU0 is now available")
-        CONSOLE = re.compile("ios con[0|1]/(?:RS?P)?[0-1]/CPU0 is now available")
+        CONSOLE = re.compile("con[0|1]/(?:RS?P)?[0-1]/CPU0 is now available")
+        CONSOLE_STBY = re.compile("con[0|1]/(?:RS?P)?[0-1]/CPU0 is in standby")
         RECONFIGURE_USERNAME_PROMPT = "[Nn][Oo] root-system username is configured"
         ROOT_USERNAME_PROMPT = "Enter root-system username\: "
         ROOT_PASSWORD_PROMPT = "Enter secret( again)?\: "
@@ -69,11 +71,12 @@ class Driver(Generic):
                   CONSOLE, CONFIGURATION_COMPLETED, RECONFIGURE_USERNAME_PROMPT, ROOT_USERNAME_PROMPT,
                   #    10                    11              12     13          14           15
                   ROOT_PASSWORD_PROMPT, self.username_re, TIMEOUT, EOF, self.reload_cmd, CANDIDATE_BOOT_IMAGE,
-                  #   16
-                  NOT_COMMITTED]
+                  #   16            17
+                  NOT_COMMITTED, CONSOLE_STBY, CONTINUE]
 
         transitions = [
             (RELOAD_NA, [0], -1, a_reload_na, 0),
+            (CONTINUE, [0], 0, partial(a_send, "y\r"), 0),
             # temp for testing
             (NOT_COMMITTED, [0], -1, a_not_committed, 10),
             (DONE, [0], 2, None, 120),
@@ -90,6 +93,7 @@ class Driver(Generic):
             (ROOT_PASSWORD_PROMPT, [9], 9, partial(a_send_password, self.device.node_info.password), 1),
             (CONFIGURATION_IN_PROCESS, [6, 9], 10, None, 1200),
             (CONFIGURATION_COMPLETED, [10], -1, a_reconnect, 0),
+            (CONSOLE_STBY, [4], -1, ConnectionStandbyConsole("Standby Console"), 0),
             (self.username_re, [7, 9], -1, a_return_and_reconnect, 0),
             (TIMEOUT, [0, 1, 2], -1, ConnectionAuthenticationError("Unable to reload"), 0),
             (EOF, [0, 1, 2, 3, 4, 5], -1, ConnectionError("Device disconnected"), 0),

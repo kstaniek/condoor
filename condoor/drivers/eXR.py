@@ -5,7 +5,7 @@ import re
 import pexpect
 
 from condoor.exceptions import CommandSyntaxError, CommandTimeoutError, ConnectionError,\
-    ConnectionAuthenticationError, CommandError
+    ConnectionAuthenticationError, CommandError, ConnectionStandbyConsole
 from condoor.actions import a_connection_closed, a_expected_prompt, a_stays_connected, a_unexpected_prompt, a_send, \
     a_store_cmd_result, a_message_callback, a_send_line, a_reconnect, a_send_boot, a_return_and_reconnect, \
     a_send_username, a_send_password
@@ -143,7 +143,8 @@ class Driver(XRDriver):
         DONE = re.compile(re.escape("[Done]"))
 
         STAND_BY = re.compile("Please stand by while rebooting the system")
-        CONSOLE = re.compile("ios con[0|1]/(?:RS?P)?[0-1]/CPU0 is now available")
+        CONSOLE = re.compile("con[0|1]/(?:RS?P)?[0-1]/CPU0 is now available")
+        CONSOLE_STBY = re.compile("con[0|1]/(?:RS?P)?[0-1]/CPU0 is in standby")
         CONFIGURATION_COMPLETED = re.compile("SYSTEM CONFIGURATION COMPLETED")
         CONFIGURATION_IN_PROCESS = re.compile("SYSTEM CONFIGURATION IN PROCESS")
         BOOTING = re.compile("Booting IOS-XR 64 bit Boot previously installed image")
@@ -152,14 +153,14 @@ class Driver(XRDriver):
         events = [RELOAD_PROMPT, START_TO_BACKUP, BACKUP_IN_PROGRESS, BACKUP_HAS_COMPLETED_SUCCESSFULLY, DONE, BOOTING,
                   #   6                  7               8                     9                         10
                   CONSOLE, self.press_return_re, CONFIGURATION_COMPLETED, CONFIGURATION_IN_PROCESS, self.username_re,
-                  # 11          12           13           14
-                  EOF, pexpect.TIMEOUT, self.rommon_re, STAND_BY]
+                  # 11          12           13           14        15
+                  EOF, pexpect.TIMEOUT, self.rommon_re, STAND_BY, CONSOLE_STBY]
 
         transitions = [
             # do I really need to clean the cmd
             (RELOAD_PROMPT, [0], 1, partial(a_send_line, "yes"), MAX_BOOT_TIME),
             (START_TO_BACKUP, [0, 1], 2, a_message_callback, 60),
-            (BACKUP_IN_PROGRESS, [0, 1, 2], 2, a_message_callback, 60),
+            (BACKUP_IN_PROGRESS, [0, 1, 2], 2, a_message_callback, 90),
             (BACKUP_HAS_COMPLETED_SUCCESSFULLY, [0, 1, 2], 3, a_message_callback, 10),
             (DONE, [1, 2, 3], 4, None, MAX_BOOT_TIME),
             (STAND_BY, [2, 3, 4], 5, a_message_callback, MAX_BOOT_TIME),
@@ -168,7 +169,8 @@ class Driver(XRDriver):
             (CONSOLE, [0, 1, 2, 3, 4, 5], 6, None, 600),
             (self.press_return_re, [6], 7, partial(a_send, "\r"), 300),
             (CONFIGURATION_IN_PROCESS, [7], 8, None, 180),
-            (CONFIGURATION_COMPLETED, [8], -1, a_reconnect, 0),
+            (CONFIGURATION_COMPLETED, [8], -1, a_return_and_reconnect, 0),
+            (CONSOLE_STBY, [5], -1, ConnectionStandbyConsole("Standby Console"), 0),
             (self.username_re, [9], -1, a_return_and_reconnect, 0),
             (EOF, [0, 1, 2, 3, 4, 5], -1, ConnectionError("Device disconnected"), 0),
             (pexpect.TIMEOUT, [7], 9, partial(a_send, "\r"), 180),

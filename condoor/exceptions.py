@@ -25,25 +25,21 @@ class GeneralError(Exception):
 class InvalidHopInfoError(GeneralError):
     """Invalid device connection parameters."""
 
-    pass
-
 
 class ConnectionError(GeneralError):
     """General connection error."""
-
-    pass
 
 
 class ConnectionAuthenticationError(ConnectionError):
     """Connection authentication error."""
 
-    pass
-
 
 class ConnectionTimeoutError(ConnectionError):
     """Connection timeout error."""
 
-    pass
+
+class ConnectionStandbyConsole(ConnectionError):
+    """Connected to standby console."""
 
 
 class CommandError(GeneralError):
