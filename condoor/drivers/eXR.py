@@ -7,7 +7,7 @@ import pexpect
 from condoor.exceptions import CommandSyntaxError, CommandTimeoutError, ConnectionError,\
     ConnectionAuthenticationError, CommandError, ConnectionStandbyConsole
 from condoor.actions import a_connection_closed, a_expected_prompt, a_stays_connected, a_unexpected_prompt, a_send, \
-    a_store_cmd_result, a_message_callback, a_send_line, a_reconnect, a_send_boot, a_return_and_reconnect, \
+    a_store_cmd_result, a_message_callback, a_send_line, a_send_boot, a_return_and_reconnect, \
     a_send_username, a_send_password
 from condoor.utils import pattern_to_str
 from condoor.fsm import FSM
