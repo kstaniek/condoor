@@ -315,7 +315,8 @@ class Device(object):
             module = sys.modules[module_str]
             driver_class = getattr(module, 'Driver')
         except ImportError as e:  # pylint: disable=invalid-name
-            self.chain.connection.log("Import error", exc_info=e)
+            print("driver name: {}".format(driver_name))
+            self.chain.connection.log("Import error: {}: '{}'".format(driver_name, str(e)))
             # no driver - call again with default 'generic'
             return self.make_driver()
 

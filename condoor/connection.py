@@ -9,7 +9,7 @@ from hashlib import md5
 
 from collections import deque
 from condoor.chain import Chain
-from condoor.exceptions import ConnectionError, ConnectionTimeoutError
+from condoor.exceptions import ConnectionError, ConnectionTimeoutError, ConnectionStandbyConsole
 from condoor.utils import FilteredFile, normalize_urls
 from condoor.log import FileLogger
 from condoor.version import __version__
@@ -486,9 +486,25 @@ class Connection(object):
         """
         begin = time.time()
         self._chain.target_device.clear_info()
-        result = self._chain.target_device.reload(reload_timeout, save_config, no_reload_cmd)
+        result = False
+        try:
+            result = self._chain.target_device.reload(reload_timeout, save_config, no_reload_cmd)
+
+        except ConnectionStandbyConsole as exc:
+            message = exc.message
+            self.log("Active RP became standby: {}".format(message))
+            self.disconnect()
+            # self._conn_status.clear()
+            result = self.reconnect()
+
+        # connection error caused by device booting up
+        except ConnectionError as exc:
+            message = exc.message
+            self.log("Connection error: {}".format(message))
+            self.disconnect()
+            result = self.reconnect()
+
         if result:
-            self._write_cache()
             elapsed = time.time() - begin
             self.emit_message("Target device reload last {:.0f}s.".format(elapsed), log_level=logging.INFO)
         else:
